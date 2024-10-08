@@ -88,7 +88,7 @@ ICMP (Internet Control Message Protocol) is typically used for sending error mes
 
 This script uses built-in Python libraries like `socket`, `base64`, and `struct`. There are no external dependencies. However, to ensure proper execution, especially if you are planning to add more functionalities, you can create a `requirements.txt` file for package management.
 
-### `requirements.txt`
+## `requirements.txt`
 
 If needed, create the following `requirements.txt` file:
 
