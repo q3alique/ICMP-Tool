@@ -4,6 +4,8 @@ import struct
 import sys
 import time
 import base64
+import re
+import platform
 
 # Constants for ICMP
 ICMP_ECHO_REQUEST = 8
@@ -55,6 +57,10 @@ def send_icmp_message(host, data, use_base64):
     sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
     packet_id = os.getpid() & 0xFFFF
     
+    # Automatically force Base64 encoding on Windows
+    if platform.system().lower() == 'windows':
+        use_base64 = True
+    
     if use_base64:
         # Base64 encode the message
         data = base64.b64encode(data.encode('utf-8')).decode('utf-8')
@@ -66,12 +72,14 @@ def send_icmp_message(host, data, use_base64):
 
 def is_base64_encoded(data):
     """Check if a string is Base64 encoded."""
-    try:
-        if base64.b64encode(base64.b64decode(data)).decode('utf-8') == data:
+    # Base64 strings should have a length that's a multiple of 4 and only contain valid Base64 characters
+    if len(data) % 4 == 0 and re.match('^[A-Za-z0-9+/]+={0,2}$', data):
+        try:
+            base64.b64decode(data, validate=True)
             return True
-        return False
-    except Exception:
-        return False
+        except base64.binascii.Error:
+            return False
+    return False
 
 def receive_icmp_message(sock):
     """Receive ICMP message."""
@@ -87,15 +95,22 @@ def receive_icmp_message(sock):
         
         # Check if the packet is an ICMP echo request (Type 8)
         if icmp_type == ICMP_ECHO_REQUEST:
-            payload = packet[28:].decode('utf-8')
+            payload = packet[28:].decode('latin1')  # Use latin1 to safely decode arbitrary byte data
             
-            # Check if the payload is Base64 encoded
-            if is_base64_encoded(payload):
-                decoded_payload = base64.b64decode(payload).decode('utf-8')
-                print(f"{Colors.OKBLUE}Received Base64 encoded payload: {payload}{Colors.ENDC}")
-                print(f"{Colors.OKGREEN}Decoded Base64 message: {decoded_payload}{Colors.ENDC}")
+            if len(payload.strip()) == 0:
+                print(f"{Colors.WARNING}Received empty payload{Colors.ENDC}")
             else:
-                print(f"{Colors.OKGREEN}Received plain message: {payload}{Colors.ENDC}")
+                # Check if the payload is Base64 encoded
+                if is_base64_encoded(payload):
+                    try:
+                        decoded_payload = base64.b64decode(payload).decode('utf-8')
+                        print(f"{Colors.OKBLUE}Received Base64 encoded payload: {payload}{Colors.ENDC}")
+                        print(f"{Colors.OKGREEN}Decoded Base64 message: {decoded_payload}{Colors.ENDC}")
+                    except UnicodeDecodeError:
+                        print(f"{Colors.FAIL}Error decoding Base64 payload: Invalid UTF-8 sequence{Colors.ENDC}")
+                else:
+                    # Show the message only once for plain text
+                    print(f"{Colors.OKGREEN}Received plain message: {payload}{Colors.ENDC}")
             
             break
         else:
